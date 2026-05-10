@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from app.api.extract import router as extract_router
 from app.api.health import router as health_router
@@ -9,14 +12,15 @@ from app.api.records import router as records_router
 from app.api.review import router as review_router
 from app.api.export import router as export_router
 
-
+import os
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="MedGemma Prescription Review",
-    version="0.1.0"
+    version="0.2.0"
 )
+
 app.include_router(schema_router)
 app.include_router(health_router)
 app.include_router(upload_router)
@@ -25,8 +29,13 @@ app.include_router(records_router)
 app.include_router(review_router)
 app.include_router(export_router)
 
+
 @app.get("/")
 def root():
+    use_mock = os.getenv("USE_MOCK", "false").lower() == "true"
+    provider = "mock" if use_mock else "medgemma-llama-cpp-local"
     return {
-        "message": "MedGemma Prescription Review API Running"
+        "message": "MedGemma Prescription Review API",
+        "version": "0.2.0",
+        "provider": provider
     }

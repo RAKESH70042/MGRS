@@ -46,11 +46,7 @@ def export_json():
     export_path = EXPORT_DIR / "reviewed_records.json"
 
     with open(export_path, "w") as f:
-        json.dump(
-            export_data,
-            f,
-            indent=4
-        )
+        json.dump(export_data, f, indent=4)
 
     db.close()
 

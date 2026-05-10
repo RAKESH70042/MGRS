@@ -1,6 +1,29 @@
-venv/
+# Environment - contains secret tokens
+.env
+
+# Model files - too large for git (2.7GB)
+models/
+
+# Python cache
 __pycache__/
 *.pyc
-.env
+*.pyo
+.pytest_cache/
+
+# Database
 *.db
+
+# Uploads and exports
+uploads/
 exports/
+
+# Virtual environment
+venv/
+.venv/
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
