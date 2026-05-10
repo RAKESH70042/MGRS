@@ -1,6 +1,5 @@
 import streamlit as st
 import requests
-import pandas as pd
 import json
 
 API_BASE = "http://127.0.0.1:8000"
@@ -11,241 +10,248 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# -----------------------------
-# CUSTOM CSS
-# -----------------------------
-
+# ── GLOBAL STYLES ──────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    /* General */
-    .block-container {
-        padding: 1.5rem 2rem;
-        max-width: 100%;
-    }
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap');
 
-    /* Title */
-    .main-title {
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: #1a1a2e;
-        margin-bottom: 0.2rem;
-    }
-    .main-subtitle {
-        font-size: 0.9rem;
-        color: #666;
-        margin-bottom: 1.5rem;
-    }
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+#MainMenu, footer, header { visibility: hidden; }
+.stDeployButton { display: none; }
 
-    /* Section headers */
-    .section-header {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #1a1a2e;
-        padding: 0.4rem 0;
-        border-bottom: 2px solid #e8e8f0;
-        margin-bottom: 0.8rem;
-    }
+/* TOP NAV */
+.topnav {
+    background: #f7f9fb;
+    border-bottom: 1px solid #c3c6d7;
+    padding: 0 48px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 999;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.topnav-brand {
+    display: flex; align-items: center; gap: 10px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 1.4rem; font-weight: 800;
+    color: #004ac6;
+}
+.topnav-nav { display: flex; align-items: center; gap: 32px; }
+.topnav-nav a {
+    text-decoration: none; font-size: 0.9rem;
+    color: #434655; padding-bottom: 4px;
+    transition: color 0.15s;
+}
+.topnav-nav a.active {
+    color: #004ac6; border-bottom: 2px solid #004ac6; font-weight: 600;
+}
+.topnav-nav a:hover { color: #004ac6; }
+.avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: #dbe1ff; display: flex; align-items: center;
+    justify-content: center; font-weight: 700; color: #004ac6;
+    font-size: 0.9rem; border: 1px solid #c3c6d7;
+}
 
-    /* Upload response box */
-    .upload-response-box {
-        background: #f0fdf4;
-        border: 1px solid #86efac;
-        border-radius: 8px;
-        padding: 0.6rem 1rem;
-        font-size: 0.85rem;
-        color: #166534;
-        margin-top: 0.5rem;
-    }
+/* MAIN CONTENT - padding applied via block-container override */
+.block-container { padding: 2rem 3rem 2rem 3rem !important; max-width: 100% !important; background: #f7f9fb; }
 
-    /* Extraction card */
-    .extraction-card {
-        background: #fafafa;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 1rem;
-    }
+/* PAGE HEADER */
+.page-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 2.1rem; font-weight: 700;
+    color: #191c1e; margin-bottom: 6px;
+}
+.page-subtitle { color: #434655; font-size: 1rem; margin-bottom: 32px; }
 
-    /* Medication card */
-    .med-card {
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 0.8rem 1rem;
-        margin-bottom: 0.6rem;
-    }
-    .med-name {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #1a1a2e;
-    }
-    .med-detail {
-        font-size: 0.82rem;
-        color: #555;
-        margin-top: 0.2rem;
-    }
-    .confidence-high { color: #16a34a; font-weight: 600; }
-    .confidence-mid  { color: #d97706; font-weight: 600; }
-    .confidence-low  { color: #dc2626; font-weight: 600; }
+/* STEP CARDS */
+.step-card {
+    background: #ffffff;
+    border: 1px solid #c3c6d7;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    margin-bottom: 4px;
+}
+.step-label {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #004ac6; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+}
+.dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #004ac6; display: inline-block;
+    animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+.step-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 1.25rem; font-weight: 700; color: #191c1e; margin-bottom: 4px;
+}
+.step-desc { font-size: 0.84rem; color: #434655; margin-bottom: 16px; }
 
-    /* Patient info row */
-    .info-row {
-        display: flex;
-        gap: 1rem;
-        flex-wrap: wrap;
-        margin-bottom: 0.8rem;
-    }
-    .info-chip {
-        background: #eff6ff;
-        border: 1px solid #bfdbfe;
-        border-radius: 20px;
-        padding: 0.25rem 0.75rem;
-        font-size: 0.82rem;
-        color: #1d4ed8;
-    }
+/* UPLOAD ZONE */
+.upload-zone {
+    border: 2px dashed #c3c6d7; border-radius: 10px;
+    padding: 36px 20px; text-align: center; background: #f2f4f6;
+}
+.upload-hint { font-size: 0.75rem; color: #737686; margin-top: 8px; }
 
-    /* Review buttons */
-    .stButton > button {
-        width: 100%;
-        border-radius: 8px;
-        font-weight: 600;
-        padding: 0.5rem;
-    }
+/* LOCKED */
+.locked-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #fff; border: 1px solid #c3c6d7;
+    border-radius: 99px; padding: 8px 18px;
+    font-size: 0.8rem; font-weight: 600; color: #434655;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+    margin-top: 10px;
+}
 
-    /* Approve button */
-    div[data-testid="column"]:nth-child(1) .stButton > button {
-        background-color: #16a34a;
-        color: white;
-        border: none;
-    }
-    div[data-testid="column"]:nth-child(1) .stButton > button:hover {
-        background-color: #15803d;
-    }
+/* SECTION TITLE */
+.sec-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 1.15rem; font-weight: 700;
+    color: #191c1e; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+}
 
-    /* Reject button */
-    div[data-testid="column"]:nth-child(2) .stButton > button {
-        background-color: #dc2626;
-        color: white;
-        border: none;
-    }
-    div[data-testid="column"]:nth-child(2) .stButton > button:hover {
-        background-color: #b91c1c;
-    }
+/* BADGE */
+.badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 99px;
+    font-size: 0.72rem; font-weight: 700;
+}
+.badge-completed { background: #e6f9f2; color: #006242; }
+.badge-pending   { background: #dbe1ff; color: #004ac6; }
+.badge-rejected  { background: #ffdad6; color: #ba1a1a; }
 
-    /* Review response */
-    .review-approved {
-        background: #f0fdf4;
-        border: 1px solid #86efac;
-        border-radius: 8px;
-        padding: 0.8rem 1rem;
-        color: #166534;
-        font-size: 0.88rem;
-    }
-    .review-rejected {
-        background: #fef2f2;
-        border: 1px solid #fca5a5;
-        border-radius: 8px;
-        padding: 0.8rem 1rem;
-        color: #991b1b;
-        font-size: 0.88rem;
-    }
+/* RECORDS TABLE */
+.records-table {
+    width: 100%; border-collapse: collapse;
+    background: #fff; border-radius: 12px; overflow: hidden;
+    border: 1px solid #c3c6d7; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.records-table th {
+    background: #f2f4f6; padding: 12px 20px;
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #737686; text-align: left;
+    border-bottom: 1px solid #c3c6d7;
+}
+.records-table td {
+    padding: 14px 20px; font-size: 0.88rem;
+    color: #191c1e; border-bottom: 1px solid #e0e3e5;
+}
+.records-table tr:last-child td { border-bottom: none; }
+.records-table tr:hover td { background: #f2f4f6; }
 
-    /* Divider */
-    hr {
-        margin: 1.2rem 0;
-        border-color: #e8e8f0;
-    }
+/* BUTTON OVERRIDES */
+.stButton > button {
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    font-size: 0.88rem !important;
+    transition: all 0.15s !important;
+}
 
-    /* Hide default streamlit elements */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+/* FOOTER */
+.site-footer {
+    background: #fff; border-top: 1px solid #c3c6d7;
+    padding: 20px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 0.78rem; color: #737686;
+}
+.site-footer a { color: #434655; text-decoration: none; margin-left: 20px; }
+.site-footer a:hover { color: #004ac6; }
 </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------
-# SESSION STATE
-# -----------------------------
+# ── SESSION STATE ──────────────────────────────────────────────────────────────
+for key in ["extraction_data", "review_response", "upload_data", "uploaded_file_name"]:
+    if key not in st.session_state:
+        st.session_state[key] = None
 
-if "extraction_data" not in st.session_state:
-    st.session_state.extraction_data = None
-if "review_response" not in st.session_state:
-    st.session_state.review_response = None
-if "upload_data" not in st.session_state:
-    st.session_state.upload_data = None
+# ── TOP NAV ────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="topnav">
+    <div class="topnav-brand">⚕️ MedGemma</div>
+    <nav class="topnav-nav">
+        <a href="#">Dashboard</a>
+        <a href="#" class="active">Prescriptions</a>
+        <a href="#">Analytics</a>
+        <a href="#">Patients</a>
+    </nav>
+    <div class="avatar">Dr</div>
+</div>
+""", unsafe_allow_html=True)
 
-# -----------------------------
-# HEADER
-# -----------------------------
+# ── MAIN CONTENT ───────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="page-title">💊 MedGemma Prescription Review</div>
+<div class="page-subtitle">Advanced AI-powered clinical verification and digital record extraction system.</div>
+""", unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">🩺 MedGemma Prescription Review</div>', unsafe_allow_html=True)
-st.markdown('<div class="main-subtitle">AI-powered prescription extraction and review system</div>', unsafe_allow_html=True)
+# ── STEP CARDS ─────────────────────────────────────────────────────────────────
+col1, col2 = st.columns(2, gap="large")
 
-# Sidebar actions
-with st.sidebar:
-    st.title("⚙️ Actions")
-    if st.button("🔄 Refresh Records"):
-        try:
-            r = requests.get(f"{API_BASE}/records")
-            st.session_state.records = r.json()
-            st.success("Refreshed")
-        except Exception as e:
-            st.error(str(e))
-
-    if st.button("📤 Export JSON"):
-        try:
-            r = requests.get(f"{API_BASE}/export/json")
-            st.success("Export Completed")
-            st.json(r.json())
-        except Exception as e:
-            st.error(str(e))
-
-# ==============================
-# MAIN LAYOUT: LEFT | RIGHT
-# ==============================
-
-left_col, right_col = st.columns([1, 1.4], gap="large")
-
-# ==============================
-# LEFT COLUMN — Upload
-# ==============================
-
-with left_col:
-
-    # --- Upload Section ---
-    st.markdown('<div class="section-header">📁 Upload Prescription</div>', unsafe_allow_html=True)
+with col1:
+    st.markdown("""
+    <div class="step-card">
+        <div class="step-label"><span class="dot"></span> STEP 01</div>
+        <div class="step-title">1. Upload Prescription</div>
+        <div class="step-desc">Choose an image of the physical prescription to initiate scanning.</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     uploaded_file = st.file_uploader(
-        "Choose a prescription image",
+        "Upload",
         type=["png", "jpg", "jpeg"],
         label_visibility="collapsed"
     )
 
     if uploaded_file:
         st.image(uploaded_file, use_container_width=True)
+        if st.session_state.uploaded_file_name != uploaded_file.name:
+            with st.spinner("Uploading…"):
+                try:
+                    resp = requests.post(
+                        f"{API_BASE}/upload",
+                        files={"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
+                    )
+                    st.session_state.upload_data = resp.json()
+                    st.session_state.uploaded_file_name = uploaded_file.name
+                    st.session_state.extraction_data = None
+                    st.session_state.review_response = None
+                except Exception as e:
+                    st.error(f"Upload failed: {e}")
 
-        # Auto-upload on file select
-        files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
-        try:
-            upload_response = requests.post(f"{API_BASE}/upload", files=files)
-            st.session_state.upload_data = upload_response.json()
-        except Exception as e:
-            st.error(f"Upload failed: {e}")
-
-        # --- Upload Response ---
         if st.session_state.upload_data:
-            d = st.session_state.upload_data
-            st.markdown(
-                f'<div class="upload-response-box">'
-                f'✅ <b>{d.get("filename","")}</b> saved successfully<br>'
-                f'<span style="color:#555">Type: {d.get("content_type","")} &nbsp;|&nbsp; Path: {d.get("saved_to","")}</span>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
+            st.success(f"✅ **{st.session_state.upload_data.get('filename', uploaded_file.name)}** ready for extraction")
+    else:
+        st.markdown("""
+        <div class="upload-zone">
+            <div style="font-size:2.5rem;margin-bottom:12px">☁️</div>
+            <div style="font-size:0.88rem;color:#434655;font-weight:500">Drop your file here or use the uploader above</div>
+            <div class="upload-hint">200MB per file &nbsp;·&nbsp; PNG, JPG, JPEG</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
+with col2:
+    unlocked = uploaded_file is not None and st.session_state.upload_data is not None
+    opacity = "1" if unlocked else "0.5"
 
-        # --- Extract Button ---
-        if st.button("🔍 Run Extraction", use_container_width=True):
-            with st.spinner("MedGemma is reading the prescription... (~60s)"):
+    st.markdown(f"""
+    <div class="step-card" style="opacity:{opacity}">
+        <div class="step-label">STEP 02</div>
+        <div class="step-title">2. Run Extraction</div>
+        <div class="step-desc">AI reads the prescription and extracts structured clinical data.</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if unlocked:
+        if st.button("✨ Run AI Analysis", type="primary", use_container_width=True):
+            with st.spinner("MedGemma reading prescription… (~60s)"):
                 try:
                     r = requests.get(
                         f"{API_BASE}/extract",
@@ -253,200 +259,144 @@ with left_col:
                     )
                     st.session_state.extraction_data = r.json()
                     st.session_state.review_response = None
-                    st.success("✅ Extraction completed!")
+                    st.success("✅ Extraction complete!")
                 except Exception as e:
                     st.error(str(e))
 
-    # --- Review Actions ---
-    if st.session_state.extraction_data and "record_id" in st.session_state.extraction_data:
+        # ── EXTRACTION RESULTS ────────────────────────────────────────────────
+        if st.session_state.extraction_data and "record_id" in st.session_state.extraction_data:
+            data = st.session_state.extraction_data
+            meta = data.get("run_metadata", {})
 
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.markdown('<div class="section-header">✍️ Review Actions</div>', unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="sec-title">
+                📋 Extraction Results &nbsp;
+                <span style="font-size:0.76rem;background:#dbe1ff;color:#004ac6;
+                padding:3px 12px;border-radius:99px;font-weight:600">
+                    {data.get('record_id','')}
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
 
-        record_id = st.session_state.extraction_data.get("record_id")
-
-        reviewer_notes = st.text_area(
-            "Reviewer Notes",
-            placeholder="Add notes before approving or rejecting...",
-            height=80
-        )
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            if st.button("✅ Approve"):
-                try:
-                    r = requests.put(
-                        f"{API_BASE}/review/{record_id}",
-                        params={"status": "approved", "reviewer_notes": reviewer_notes}
-                    )
-                    st.session_state.review_response = r.json()
-                except Exception as e:
-                    st.error(str(e))
-
-        with col2:
-            if st.button("❌ Reject"):
-                try:
-                    r = requests.put(
-                        f"{API_BASE}/review/{record_id}",
-                        params={"status": "rejected", "reviewer_notes": reviewer_notes}
-                    )
-                    st.session_state.review_response = r.json()
-                except Exception as e:
-                    st.error(str(e))
-
-        # --- Review Response ---
-        if st.session_state.review_response:
-            rv = st.session_state.review_response
-            status = rv.get("review", {}).get("status", "")
-            notes  = rv.get("review", {}).get("reviewer_notes", "")
-            time   = rv.get("review", {}).get("reviewed_at", "")
-
-            css_class = "review-approved" if status == "approved" else "review-rejected"
-            icon      = "✅" if status == "approved" else "❌"
-
-            st.markdown(
-                f'<div class="{css_class}">'
-                f'{icon} <b>Record {status.capitalize()}</b><br>'
-                f'{"<span>Notes: " + notes + "</span><br>" if notes else ""}'
-                f'<span style="opacity:0.7;font-size:0.78rem">{time}</span>'
-                f'</div>',
-                unsafe_allow_html=True
+            st.json(data)
+            st.caption(
+                f"🤖 **{meta.get('model_name','')} {meta.get('model_version','')}** &nbsp;·&nbsp; "
+                f"⏱ {meta.get('latency_ms',0)/1000:.1f}s &nbsp;·&nbsp; "
+                f"🏷 {meta.get('prompt_template','')}"
             )
 
-# ==============================
-# RIGHT COLUMN — Extraction Result
-# ==============================
+            # ── REVIEW ────────────────────────────────────────────────────────
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown('<div class="sec-title">✍️ Review</div>', unsafe_allow_html=True)
 
-with right_col:
-
-    if st.session_state.extraction_data and "record_id" in st.session_state.extraction_data:
-
-        data      = st.session_state.extraction_data
-        extracted = data.get("extracted", {})
-        meds      = extracted.get("medications", [])
-        meta      = data.get("run_metadata", {})
-
-        st.markdown('<div class="section-header">📋 Extraction Result</div>', unsafe_allow_html=True)
-
-        # --- Patient Info Chips ---
-        chips = []
-        if extracted.get("patient_name"):
-            chips.append(f"👤 {extracted['patient_name']}")
-        if extracted.get("patient_age"):
-            chips.append(f"🎂 Age {extracted['patient_age']}")
-        if extracted.get("patient_gender"):
-            chips.append(f"⚧ {extracted['patient_gender']}")
-        if extracted.get("prescription_date"):
-            chips.append(f"📅 {extracted['prescription_date']}")
-        if extracted.get("prescriber_name"):
-            chips.append(f"👨‍⚕️ {extracted['prescriber_name']}")
-        if extracted.get("hospital_or_clinic"):
-            chips.append(f"🏥 {extracted['hospital_or_clinic']}")
-
-        chips_html = "".join([f'<span class="info-chip">{c}</span>' for c in chips])
-        st.markdown(f'<div class="info-row">{chips_html}</div>', unsafe_allow_html=True)
-
-        if extracted.get("diagnosis"):
-            st.markdown(f"**Diagnosis:** {extracted['diagnosis']}")
-
-        # --- Medications ---
-        st.markdown(f"**💊 Medications ({len(meds)} found)**")
-
-        for i, med in enumerate(meds):
-            score = med.get("confidence_score", 100)
-            if score >= 85:
-                conf_class = "confidence-high"
-                conf_icon  = "🟢"
-            elif score >= 65:
-                conf_class = "confidence-mid"
-                conf_icon  = "🟡"
-            else:
-                conf_class = "confidence-low"
-                conf_icon  = "🔴"
-
-            details = []
-            if med.get("dosage"):     details.append(f"💊 {med['dosage']}")
-            if med.get("unit"):       details.append(f"📦 {med['unit']}")
-            if med.get("frequency"):  details.append(f"🔁 {med['frequency']}")
-            if med.get("duration"):   details.append(f"⏱ {med['duration']}")
-            if med.get("quantity"):   details.append(f"# {med['quantity']}")
-            if med.get("timing"):     details.append(f"🕐 {med['timing']}")
-            if med.get("route"):      details.append(f"🛣 {med['route']}")
-
-            details_html = " &nbsp;|&nbsp; ".join(details)
-
-            si = med.get("special_instructions", "")
-            un = med.get("uncertainty_notes", "")
-            rt = med.get("raw_medication_text", "")
-
-            st.markdown(
-                f'<div class="med-card">'
-                f'<div style="display:flex;justify-content:space-between;align-items:center">'
-                f'<span class="med-name">{i+1}. {med.get("medication_name","")}</span>'
-                f'<span class="{conf_class}">{conf_icon} {score}%</span>'
-                f'</div>'
-                f'<div class="med-detail">{details_html}</div>'
-                f'{"<div class=\\"med-detail\\"><b>Instructions:</b> " + si + "</div>" if si else ""}'
-                f'{"<div class=\\"med-detail\\" style=\\"color:#d97706\\"><b>⚠ Note:</b> " + un + "</div>" if un else ""}'
-                f'{"<div class=\\"med-detail\\" style=\\"color:#999;font-style:italic\\">Raw: " + rt + "</div>" if rt else ""}'
-                f'</div>',
-                unsafe_allow_html=True
+            reviewer_notes = st.text_area(
+                "Reviewer Notes (optional)",
+                placeholder="Add clinical notes, flags, or comments…",
+                height=90
             )
 
-        if extracted.get("additional_notes"):
-            st.markdown(f"**📝 Additional Notes:** {extracted['additional_notes']}")
+            record_id = data.get("record_id")
+            b1, b2, _ = st.columns([1, 1, 4])
 
-        # --- Run Metadata ---
-        st.markdown(
-            f'<div style="margin-top:0.8rem;padding:0.5rem 0.8rem;background:#f8f8f8;border-radius:6px;font-size:0.78rem;color:#888">'
-            f'🤖 {meta.get("model_name","")} {meta.get("model_version","")} &nbsp;|&nbsp; '
-            f'⏱ {meta.get("latency_ms",0)/1000:.1f}s &nbsp;|&nbsp; '
-            f'🆔 {data.get("record_id","")}'
-            f'</div>',
-            unsafe_allow_html=True
-        )
+            with b1:
+                if st.button("✅ Approve", type="primary", use_container_width=True):
+                    try:
+                        r = requests.put(
+                            f"{API_BASE}/review/{record_id}",
+                            params={"status": "approved", "reviewer_notes": reviewer_notes}
+                        )
+                        st.session_state.review_response = r.json()
+                    except Exception as e:
+                        st.error(str(e))
+
+            with b2:
+                if st.button("❌ Reject", use_container_width=True):
+                    try:
+                        r = requests.put(
+                            f"{API_BASE}/review/{record_id}",
+                            params={"status": "rejected", "reviewer_notes": reviewer_notes}
+                        )
+                        st.session_state.review_response = r.json()
+                    except Exception as e:
+                        st.error(str(e))
+
+            if st.session_state.review_response:
+                st.json(st.session_state.review_response)
 
     else:
-        st.markdown(
-            '<div style="height:300px;display:flex;align-items:center;justify-content:center;'
-            'background:#fafafa;border:2px dashed #e2e8f0;border-radius:12px;color:#aaa;font-size:0.95rem">'
-            '📋 Extraction result will appear here'
-            '</div>',
-            unsafe_allow_html=True
-        )
+        st.markdown("""
+        <div class="locked-badge">🔒 &nbsp;Complete Step 1 First</div>
+        """, unsafe_allow_html=True)
 
-# ==============================
-# STORED RECORDS — Collapsible
-# ==============================
+# ── STORED RECORDS ─────────────────────────────────────────────────────────────
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown('<div class="sec-title">🗃️ Stored Records</div>', unsafe_allow_html=True)
 
-st.markdown("<hr>", unsafe_allow_html=True)
+try:
+    records_resp = requests.get(f"{API_BASE}/records")
+    records = records_resp.json()
 
-with st.expander("🗃️ Stored Records", expanded=False):
-    try:
-        r = requests.get(f"{API_BASE}/records")
-        records_data = r.json()
+    if records:
+        rows = []
+        for rec in records:
+            review = json.loads(rec.get("review_json", "{}"))
+            status = review.get("status", "pending")
+            if status == "approved":
+                badge = '<span class="badge badge-completed">● Completed</span>'
+            elif status == "rejected":
+                badge = '<span class="badge badge-rejected">● Rejected</span>'
+            else:
+                badge = '<span class="badge badge-pending">● Pending</span>'
+            rows.append({
+                "patient":   rec.get("patient_name", "—"),
+                "med":       rec.get("medication", "—"),
+                "uploaded":  rec.get("uploaded_at", rec.get("source_file", "—")),
+                "status":    badge,
+                "record_id": rec.get("record_id", "—"),
+            })
 
-        if records_data:
-            formatted = []
-            for rec in records_data:
-                review  = json.loads(rec.get("review_json", "{}"))
-                status  = review.get("status", "pending")
-                icon    = "✅" if status == "approved" else ("❌" if status == "rejected" else "⏳")
+        table_rows = ""
+        for row in rows:
+            table_rows += f"""
+            <tr>
+                <td style="font-weight:600">{row['patient']}</td>
+                <td style="color:#434655">{row['med']}</td>
+                <td style="color:#434655">{row['uploaded']}</td>
+                <td>{row['status']}</td>
+                <td style="color:#737686;font-size:0.78rem">{row['record_id']}</td>
+            </tr>"""
 
-                formatted.append({
-                    "Status":      f"{icon} {status.capitalize()}",
-                    "Record ID":   rec["record_id"],
-                    "Source File": rec["source_file"],
-                    "Method":      rec["method"],
-                })
+        st.markdown(f"""
+        <table class="records-table">
+            <thead>
+                <tr>
+                    <th>Patient Name</th>
+                    <th>Medication</th>
+                    <th>Uploaded</th>
+                    <th>Status</th>
+                    <th>Record ID</th>
+                </tr>
+            </thead>
+            <tbody>{table_rows}</tbody>
+        </table>
+        <div style="margin-top:8px;font-size:0.78rem;color:#737686">{len(rows)} records total</div>
+        """, unsafe_allow_html=True)
+    else:
+        st.info("No records yet.")
 
-            df = pd.DataFrame(formatted)
-            st.dataframe(df, use_container_width=True, height=250)
-            st.caption(f"Total: {len(formatted)} records")
+except Exception as e:
+    st.error(str(e))
 
-        else:
-            st.info("No records found yet.")
 
-    except Exception as e:
-        st.error(str(e))
+# ── FOOTER ─────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="site-footer">
+    <div>© 2024 MedGemma Clinical Systems. &nbsp; HIPAA Compliant.</div>
+    <div>
+        <a href="#">Privacy Protocol</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Security Whitepaper</a>
+    </div>
+</div>
+""", unsafe_allow_html=True)
