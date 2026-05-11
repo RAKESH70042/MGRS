@@ -3,6 +3,9 @@ import os
 from fastapi import APIRouter, Query, HTTPException
 
 from app.services.save_record import save_prescription_record
+from app.storage.database import SessionLocal
+from app.storage.models import PrescriptionRecordDB
+from app.utils import generate_record_id
 
 router = APIRouter()
 
@@ -24,8 +27,17 @@ else:
 def extract_demo(
     file_name: str = Query(...)
 ):
+    # 1. Fetch current records to safely generate a sequential ID
+    db = SessionLocal()
+    records = db.query(PrescriptionRecordDB).all()
+    db.close()
+    
+    # 2. Generate the next RXMED ID safely based on DB state
+    new_record_id = generate_record_id(records)
+
     try:
-        result = _extract(file_name)
+        # 3. Pass the explicitly generated ID to the extraction provider
+        result = _extract(file_name, new_record_id)
 
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -42,3 +54,13 @@ def extract_demo(
     save_prescription_record(result)
 
     return result
+
+@router.delete("/records/all")
+def delete_all_records():
+    db = SessionLocal()
+    try:
+        db.query(PrescriptionRecordDB).delete()
+        db.commit()
+        return {"message": "All records deleted successfully"}
+    finally:
+        db.close()

@@ -1,10 +1,9 @@
 from app.schemas.prescription import PrescriptionRecord
-import uuid
 
-def mock_extract(file_name: str):
+def mock_extract(file_name: str, record_id: str):
 
     result = PrescriptionRecord(
-        record_id=f"RX-{uuid.uuid4().hex[:8]}",
+        record_id=record_id, # Use the passed sequential ID instead of random UUID
         source_file=file_name,
         method="medgemma",
 

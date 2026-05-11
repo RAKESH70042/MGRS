@@ -6,7 +6,6 @@ Level 1 + Level 2 improvements:
 """
 
 import os
-import uuid
 import base64
 import time
 import json
@@ -223,7 +222,7 @@ def _call_llama_server(image_b64: str, mime_type: str) -> tuple[dict, int]:
     return extracted, latency_ms
 
 
-def medgemma_extract(file_name: str) -> PrescriptionRecord:
+def medgemma_extract(file_name: str, record_id: str) -> PrescriptionRecord:    
 
     _check_server()
 
@@ -239,7 +238,7 @@ def medgemma_extract(file_name: str) -> PrescriptionRecord:
         extracted_data["medications"] = []
 
     return PrescriptionRecord(
-        record_id=f"RX-{uuid.uuid4().hex[:8]}",
+        record_id=record_id,
         source_file=file_name,
         method="medgemma",
         extracted=extracted_data,
