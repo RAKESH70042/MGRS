@@ -3,8 +3,155 @@ import requests
 import json
 import pandas as pd
 import time
+import io
+import csv
 
 API_BASE = "http://127.0.0.1:8000"
+
+
+# ── EXPORT HELPERS ─────────────────────────────────────────────────────────────
+
+def _build_docx(report: dict, turns: list, consultation_id: str) -> bytes:
+    """Build a Word document from report dict + transcript turns."""
+    try:
+        from docx import Document
+        from docx.shared import Pt, RGBColor, Inches
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+    except ImportError:
+        return b""
+
+    doc = Document()
+
+    # Title
+    title = doc.add_heading(f"Medical Consultation Report", 0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = title.runs[0]
+    run.font.color.rgb = RGBColor(0, 74, 198)
+
+    doc.add_paragraph(f"Consultation ID: {consultation_id}").runs[0].font.color.rgb = RGBColor(67, 70, 85)
+    doc.add_paragraph("")
+
+    # Report sections
+    field_map = [
+        ("Patient Complaints",   "patient_complaints"),
+        ("Symptoms",             "symptoms"),
+        ("Doctor Observations",  "doctor_observations"),
+        ("Diagnosis",            "diagnosis"),
+        ("Tests Recommended",    "tests_recommended"),
+        ("Treatment Plan",       "treatment_plan"),
+        ("Follow-up",            "follow_up_instructions"),
+        ("Important Notes",      "important_notes"),
+        ("ICD-10 Suggestions",   "icd10_suggestions"),
+    ]
+    for label, key in field_map:
+        val = report.get(key)
+        if val:
+            h = doc.add_heading(label, level=2)
+            h.runs[0].font.color.rgb = RGBColor(0, 74, 198)
+            doc.add_paragraph(str(val))
+            doc.add_paragraph("")
+
+    # Medications table
+    meds = report.get("prescribed_medicines", [])
+    if meds:
+        h = doc.add_heading("Prescribed Medicines", level=2)
+        h.runs[0].font.color.rgb = RGBColor(0, 74, 198)
+        cols = ["medication_name", "dosage", "unit", "frequency", "duration", "special_instructions"]
+        headers = ["Medicine", "Dosage", "Unit", "Frequency", "Duration", "Instructions"]
+        table = doc.add_table(rows=1, cols=len(headers))
+        table.style = "Table Grid"
+        hdr = table.rows[0].cells
+        for i, h in enumerate(headers):
+            hdr[i].text = h
+            hdr[i].paragraphs[0].runs[0].bold = True
+        for med in meds:
+            row = table.add_row().cells
+            for i, col in enumerate(cols):
+                row[i].text = str(med.get(col) or "—")
+        doc.add_paragraph("")
+
+    # SOAP note
+    soap = report.get("soap_note")
+    if soap:
+        h = doc.add_heading("SOAP Note", level=2)
+        h.runs[0].font.color.rgb = RGBColor(0, 74, 198)
+        doc.add_paragraph(soap)
+        doc.add_paragraph("")
+
+    # Transcript
+    if turns:
+        doc.add_page_break()
+        h = doc.add_heading("Consultation Transcript", level=1)
+        h.runs[0].font.color.rgb = RGBColor(0, 74, 198)
+        for turn in turns:
+            spk = turn.get("speaker", "Unknown")
+            txt = turn.get("text", "")
+            ts  = turn.get("timestamp", 0)
+            p = doc.add_paragraph()
+            label_run = p.add_run(f"{spk}  ·  {ts:.1f}s\n")
+            label_run.bold = True
+            label_run.font.color.rgb = RGBColor(0, 74, 198) if spk == "Doctor" else RGBColor(0, 98, 66)
+            label_run.font.size = Pt(8)
+            txt_run = p.add_run(txt)
+            txt_run.font.size = Pt(10)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _build_csv(report: dict, turns: list, consultation_id: str) -> bytes:
+    """Build a CSV with report fields + transcript rows."""
+    buf = io.StringIO()
+    w = csv.writer(buf)
+
+    # Report section
+    w.writerow(["SECTION", "FIELD", "VALUE"])
+    field_map = [
+        ("Report", "consultation_id",      consultation_id),
+        ("Report", "patient_complaints",   report.get("patient_complaints", "")),
+        ("Report", "symptoms",             report.get("symptoms", "")),
+        ("Report", "doctor_observations",  report.get("doctor_observations", "")),
+        ("Report", "diagnosis",            report.get("diagnosis", "")),
+        ("Report", "tests_recommended",    report.get("tests_recommended", "")),
+        ("Report", "treatment_plan",       report.get("treatment_plan", "")),
+        ("Report", "follow_up_instructions", report.get("follow_up_instructions", "")),
+        ("Report", "important_notes",      report.get("important_notes", "")),
+        ("Report", "icd10_suggestions",    report.get("icd10_suggestions", "")),
+        ("Report", "soap_note",            report.get("soap_note", "")),
+    ]
+    for row in field_map:
+        w.writerow(row)
+
+    # Medicines
+    meds = report.get("prescribed_medicines", [])
+    if meds:
+        w.writerow([])
+        w.writerow(["MEDICINES", "medication_name", "dosage", "unit", "frequency", "duration", "special_instructions"])
+        for med in meds:
+            w.writerow([
+                "Medicine",
+                med.get("medication_name", ""),
+                med.get("dosage", ""),
+                med.get("unit", ""),
+                med.get("frequency", ""),
+                med.get("duration", ""),
+                med.get("special_instructions", ""),
+            ])
+
+    # Transcript
+    if turns:
+        w.writerow([])
+        w.writerow(["TRANSCRIPT", "speaker", "timestamp_s", "text"])
+        for turn in turns:
+            w.writerow([
+                "Turn",
+                turn.get("speaker", ""),
+                turn.get("timestamp", ""),
+                turn.get("text", ""),
+            ])
+
+    return buf.getvalue().encode("utf-8")
 
 st.set_page_config(
     page_title="MedGemma — Prescription & Consultation",
@@ -406,6 +553,7 @@ with tab_consult:
                 except Exception as e:
                     st.error(str(e))
 
+
         with b2:
             if st.button(
                 "⏹ Stop & Generate Report",
@@ -416,12 +564,32 @@ with tab_consult:
                     requests.post(f"{API_BASE}/consultation/stop")
                     st.session_state.recording = False
                     cid = st.session_state.consultation_id
-                    with st.spinner("MedGemma generating report…"):
-                        r    = requests.post(f"{API_BASE}/report/generate/{cid}")
-                        data = r.json()
-                        st.session_state.report  = data.get("report", {})
-                        st.session_state.summary = data.get("summary", "")
-                    st.rerun()
+
+                    # ── Check transcript has turns before generating ──
+                    transcript_resp = requests.get(
+                        f"{API_BASE}/transcription/{cid}/full", timeout=5
+                    )
+                    turns = transcript_resp.json().get("turns", [])
+
+                    if not turns:
+                        st.warning(
+                            "⚠️ No speech was captured.\n\n"
+                            "**Possible reasons:**\n"
+                            "- Mic not allowed in browser (check address bar 🎤)\n"
+                            "- Audio was too quiet / filtered as silence\n\n"
+                            "Fix your mic and start a new consultation."
+                        )
+                    else:
+                        with st.spinner(f"MedGemma generating report from {len(turns)} turn(s)…"):
+                            r = requests.post(f"{API_BASE}/report/generate/{cid}")
+                            if r.status_code == 200:
+                                data = r.json()
+                                st.session_state.report  = data.get("report", {})
+                                st.session_state.summary = data.get("summary", "")
+                                st.rerun()
+                            else:
+                                detail = r.json().get("detail", r.text)
+                                st.error(f"Report generation failed: {detail}")
                 except Exception as e:
                     st.error(str(e))
 
@@ -475,9 +643,116 @@ with tab_consult:
             report = st.session_state.report
             cid    = st.session_state.consultation_id
 
+            # ── Summary banner ──────────────────────────────────────────────
             if st.session_state.summary:
                 st.info(f"📝 {st.session_state.summary}")
 
+            # ── Export buttons (Word + CSV) ─────────────────────────────────
+            turns_for_export = st.session_state.get("turns", [])
+
+            exp1, exp2, exp3 = st.columns([1, 1, 3])
+            with exp1:
+                docx_bytes = _build_docx(report, turns_for_export, cid)
+                if docx_bytes:
+                    st.download_button(
+                        "⬇️ Word (.docx)",
+                        data=docx_bytes,
+                        file_name=f"report_{cid}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                    )
+                else:
+                    st.caption("Install `python-docx` for Word export")
+            with exp2:
+                csv_bytes = _build_csv(report, turns_for_export, cid)
+                st.download_button(
+                    "⬇️ CSV",
+                    data=csv_bytes,
+                    file_name=f"report_{cid}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # ── Report cards (styled like transcript, not JSON) ─────────────
+            fields = [
+                ("🤒", "Patient Complaints",  "patient_complaints"),
+                ("🌡", "Symptoms",            "symptoms"),
+                ("🔬", "Doctor Observations", "doctor_observations"),
+                ("🏥", "Diagnosis",           "diagnosis"),
+                ("🧪", "Tests Recommended",   "tests_recommended"),
+                ("📋", "Treatment Plan",      "treatment_plan"),
+                ("🔁", "Follow-up",           "follow_up_instructions"),
+                ("⚠️", "Important Notes",     "important_notes"),
+                ("🏷", "ICD-10 Suggestions",  "icd10_suggestions"),
+            ]
+            report_html = ""
+            for icon, label, key in fields:
+                val = report.get(key)
+                if val:
+                    report_html += f"""
+                    <div style="background:#dbe1ff;border-radius:10px;padding:10px 16px;margin:6px 0;">
+                        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;
+                                    letter-spacing:0.08em;color:#004ac6;margin-bottom:4px;">
+                            {icon} {label}
+                        </div>
+                        <div style="font-size:0.88rem;color:#191c1e;">{val}</div>
+                    </div>"""
+
+            # Medicines as cards
+            meds = report.get("prescribed_medicines", [])
+            if meds:
+                report_html += """
+                <div style="background:#dbe1ff;border-radius:10px;padding:10px 16px;margin:6px 0;">
+                    <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;
+                                letter-spacing:0.08em;color:#004ac6;margin-bottom:8px;">
+                        💊 Prescribed Medicines
+                    </div>"""
+                for med in meds:
+                    name  = med.get("medication_name", "—")
+                    dose  = med.get("dosage", "")
+                    unit  = med.get("unit", "")
+                    freq  = med.get("frequency", "")
+                    dur   = med.get("duration", "")
+                    instr = med.get("special_instructions", "")
+                    detail_parts = []
+                    if dose or unit: detail_parts.append(f"{dose} {unit}".strip())
+                    if freq:         detail_parts.append(freq)
+                    if dur:          detail_parts.append(dur)
+                    if instr:        detail_parts.append(instr)
+                    detail = "  ·  ".join(detail_parts) if detail_parts else ""
+                    report_html += f"""
+                    <div style="background:#fff;border-radius:8px;padding:8px 12px;margin:4px 0;
+                                border-left:3px solid #004ac6;">
+                        <div style="font-size:0.88rem;font-weight:600;color:#191c1e;">{name}</div>
+                        <div style="font-size:0.78rem;color:#434655;margin-top:2px;">{detail}</div>
+                    </div>"""
+                report_html += "</div>"
+
+            # SOAP note
+            soap = report.get("soap_note")
+            if soap:
+                soap_escaped = soap.replace("\n", "<br>")
+                report_html += f"""
+                <div style="background:#f2f4f6;border-radius:10px;padding:10px 16px;margin:6px 0;
+                            border:1px solid #c3c6d7;">
+                    <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;
+                                letter-spacing:0.08em;color:#004ac6;margin-bottom:6px;">
+                        📄 SOAP Note
+                    </div>
+                    <div style="font-size:0.82rem;color:#191c1e;font-family:monospace;
+                                line-height:1.6;">{soap_escaped}</div>
+                </div>"""
+
+            if report_html:
+                st.markdown(
+                    f'<div style="max-height:600px;overflow-y:auto;">{report_html}</div>',
+                    unsafe_allow_html=True
+                )
+
+            # ── Raw JSON editor (collapsed) ─────────────────────────────────
+            st.markdown("<br>", unsafe_allow_html=True)
             with st.expander("🔍 View / Edit Raw JSON", expanded=False):
                 json_key = f"report_json_{cid}"
                 if json_key not in st.session_state:
@@ -498,41 +773,9 @@ with tab_consult:
                         requests.put(f"{API_BASE}/report/{cid}", json={"report": parsed})
                         st.session_state.report    = parsed
                         st.session_state[json_key] = json.dumps(parsed, indent=2)
-                        st.success("Saved.")
+                        st.success("Saved to DB.")
                     except Exception as e:
                         st.error(str(e))
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            fields = [
-                ("🤒 Patient Complaints",  "patient_complaints"),
-                ("🌡 Symptoms",            "symptoms"),
-                ("🔬 Doctor Observations", "doctor_observations"),
-                ("🏥 Diagnosis",           "diagnosis"),
-                ("🧪 Tests Recommended",   "tests_recommended"),
-                ("📋 Treatment Plan",      "treatment_plan"),
-                ("🔁 Follow-up",           "follow_up_instructions"),
-                ("⚠️ Important Notes",     "important_notes"),
-                ("🏷 ICD-10 Suggestions",  "icd10_suggestions"),
-            ]
-            for label, key in fields:
-                val = report.get(key)
-                if val:
-                    st.markdown(f"""
-                    <div class="section-card">
-                        <div class="sec-label">{label}</div>
-                        <div style="font-size:0.88rem;color:#191c1e;">{val}</div>
-                    </div>""", unsafe_allow_html=True)
-
-            meds = report.get("prescribed_medicines", [])
-            if meds:
-                st.markdown('<div class="sec-label">💊 Prescribed Medicines</div>', unsafe_allow_html=True)
-                st.dataframe(meds, use_container_width=True, hide_index=True)
-
-            soap = report.get("soap_note")
-            if soap:
-                st.markdown('<div class="sec-label">📄 SOAP Note</div>', unsafe_allow_html=True)
-                st.code(soap, language=None)
 
     # ── Consultation history (bottom of tab) ───────────────────────────────────
     st.markdown("<br><br>", unsafe_allow_html=True)

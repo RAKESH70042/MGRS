@@ -72,6 +72,14 @@ def start_consultation(patient_id: str = "", doctor_id: str = ""):
     # Reset diariser so Doctor/Patient labels start fresh each consultation
     reset_diariser()
 
+    # Reset Whisper rolling context — safe import in case old transcriber.py
+    # is still in place (reset_context added in updated transcriber.py)
+    try:
+        from app.services.transcriber import reset_context
+        reset_context()
+    except ImportError:
+        pass
+
     # Build session — consultation_id is required so the audio pipeline
     # can write turns back to the correct DB row after every chunk
     _session.clear()

@@ -1,6 +1,6 @@
 """
 report_generator.py
-Sends the full consultation transcript to MedGemma and gets back
+Sends consultation transcript to Ollama (via Flask proxy) and gets back
 a structured JSON medical report.
 """
 
@@ -9,12 +9,13 @@ import json
 import re
 import requests
 
-LLAMA_SERVER_URL = os.getenv("LLAMA_SERVER_URL", "http://localhost:8080")
+LLAMA_SERVER_URL = os.getenv("LLAMA_SERVER_URL", "http://localhost:9001")
+OLLAMA_MODEL     = os.getenv("OLLAMA_MODEL", "llava:7b")
 CHAT_ENDPOINT    = f"{LLAMA_SERVER_URL}/v1/chat/completions"
 
 REPORT_PROMPT = """You are an expert medical scribe AI.
 You will be given a full doctor-patient consultation transcript with speaker labels.
-Your job is to generate a complete, accurate structured medical report.
+Generate a complete, accurate structured medical report.
 
 CRITICAL RULES:
 1. Only use information explicitly stated in the transcript.
@@ -67,14 +68,11 @@ def _parse_json(raw: str) -> dict:
 
 
 def generate_report(turns: list) -> dict:
-    """
-    turns: list of dicts with keys: speaker, text, timestamp
-    Returns: structured report dict
-    """
     transcript_text = _format_transcript(turns)
 
     payload = {
-        "model": "medgemma",
+        "model": OLLAMA_MODEL,
+        "stream": False,
         "messages": [
             {
                 "role": "user",
@@ -88,28 +86,33 @@ def generate_report(turns: list) -> dict:
         ],
         "temperature": 0.1,
         "max_tokens": 2048,
-        "stream": False
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+        "User-Agent": "python-requests/2.28.0"
     }
 
     try:
         resp = requests.post(
             CHAT_ENDPOINT,
             json=payload,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             timeout=300
         )
     except requests.exceptions.Timeout:
-        raise RuntimeError("MedGemma timed out generating report.")
+        raise RuntimeError("Report generation timed out.")
 
     if resp.status_code != 200:
-        raise RuntimeError(f"MedGemma error {resp.status_code}: {resp.text[:300]}")
+        raise RuntimeError(f"Server error {resp.status_code}: {resp.text[:300]}")
 
     raw = resp.json()["choices"][0]["message"]["content"]
     return _parse_json(raw)
 
 
 def generate_report_mock(turns: list) -> dict:
-    """Returns a fake report for testing without MedGemma."""
+    """Returns a fake report for testing without the model."""
     return {
         "patient_complaints": "Fever and sore throat for 3 days",
         "symptoms": "High temperature (38.5°C), difficulty swallowing, fatigue",

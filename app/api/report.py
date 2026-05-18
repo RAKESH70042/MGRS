@@ -13,13 +13,14 @@ from typing import Optional, Dict, Any
 
 router = APIRouter()
 
-USE_MOCK = os.getenv("USE_MOCK", "false").lower() == "true"
-
 
 @router.post("/report/generate/{consultation_id}")
 def generate_report(consultation_id: str):
     from app.storage.database import SessionLocal
     from app.storage.consultation_models import ConsultationDB
+
+    # Read USE_MOCK fresh on every request — not at import time
+    USE_MOCK = os.getenv("USE_MOCK", "false").lower() == "true"
 
     db = SessionLocal()
     record = db.query(ConsultationDB).filter(
@@ -32,6 +33,8 @@ def generate_report(consultation_id: str):
 
     turns = json.loads(record.transcript_json or "[]")
 
+    print(f"[DEBUG] USE_MOCK={USE_MOCK}, turns count={len(turns)}")
+
     if not turns:
         db.close()
         raise HTTPException(status_code=400, detail="No transcript to generate report from.")
@@ -40,9 +43,9 @@ def generate_report(consultation_id: str):
         from app.services.report_generator import generate_report_mock
         report_data = generate_report_mock(turns)
     else:
-        from app.services.report_generator import generate_report
+        from app.services.report_generator import generate_report as _generate_report
         try:
-            report_data = generate_report(turns)
+            report_data = _generate_report(turns)
         except RuntimeError as e:
             db.close()
             raise HTTPException(status_code=503, detail=str(e))
