@@ -27,3 +27,13 @@ venv/
 # OS files
 .DS_Store
 Thumbs.dbllama.cpp/ 
+
+
+# Create/update .gitignore
+echo "llama.cpp/" >> .gitignore
+echo "venv/" >> .gitignore
+echo "*.dll" >> .gitignore
+echo "*.exe" >> .gitignore
+echo "*.bin" >> .gitignore
+echo "*.gguf" >> .gitignore
+echo ".env" >> .gitignore
